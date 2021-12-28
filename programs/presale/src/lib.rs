@@ -268,7 +268,7 @@ pub mod presale {
         Ok(())
     }
 
-    pub fn former_holders_config(
+    pub fn former_holders_list(
         ctx: Context<FormerHoldersList>,
         amount: u64
     ) -> ProgramResult {
@@ -283,6 +283,8 @@ pub mod presale {
         let user_account = &mut ctx.accounts.user_account;
         user_account.locked_amount = amount;
         user_account.last_deposit_ts = clock.unix_timestamp;
+
+        Ok(())
     }
 }
 
