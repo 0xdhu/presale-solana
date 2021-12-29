@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{ self, Mint, MintTo, Burn, Token, TokenAccount, Transfer };
+use anchor_spl::token::{ self, Mint, Token, TokenAccount, Transfer };
 
 use std::ops::Deref;
 
@@ -8,7 +8,7 @@ declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 // USD coin's Decimal
 const USDC_DECIMAL: u8 = 6;
 // WEN token Decimal
-// const WEN_DECIMAL:u8 = 9;
+const WEN_DECIMAL:u8 = 9;
 // NOTE: we need to consider decimals when we calculate all amount
 // because decimals are different
 // So we use DIVIDER for 10^6 / 10 ^9
@@ -102,8 +102,10 @@ pub mod presale {
             token::transfer(cpi_ctx, amount)?;
         }
 
-        let lock_amount = amount * LOCK_RATE / DENOMINATOR;
-        let spend_amount = amount - lock_amount;
+        // USDC decimal is 6 and WEN decimal is 9
+        let wen_amount = amount * DIVIDER;
+        let lock_amount = wen_amount * LOCK_RATE / DENOMINATOR;
+        let spend_amount = wen_amount - lock_amount;
 
         // Transfer WEN token from pool token account to user's token account.
         {
@@ -197,7 +199,7 @@ pub mod presale {
         let presale_account = &mut ctx.accounts.presale_account;
         
 
-        if presale_account.presale_owner != user_authority {
+        if presale_account.presale_owner != ctx.accounts.user_authority.key() {
             return Err(ErrorCode::NotRight.into())
         }
 
@@ -234,9 +236,8 @@ pub mod presale {
         ctx: Context<WithdrawWenToken>
     ) -> ProgramResult {        
         let presale_account = &mut ctx.accounts.presale_account;
-        
 
-        if presale_account.presale_owner != user_authority {
+        if presale_account.presale_owner != ctx.accounts.user_authority.key() {
             return Err(ErrorCode::NotRight.into())
         }
 
@@ -273,7 +274,7 @@ pub mod presale {
         amount: u64
     ) -> ProgramResult {
         let presale_account = &mut ctx.accounts.presale_account;       
-
+        let user_authority = ctx.accounts.user_authority.key();
         if presale_account.presale_owner != user_authority {
             return Err(ErrorCode::NotRight.into())
         }
@@ -283,6 +284,8 @@ pub mod presale {
         let user_account = &mut ctx.accounts.user_account;
         user_account.locked_amount = amount;
         user_account.last_deposit_ts = clock.unix_timestamp;
+
+        Ok(())
     }
 }
 
@@ -294,7 +297,7 @@ pub struct Initialize<'info> {
         init,
         seeds = [presale_title.as_bytes()],
         bump = bumps.presale_account,
-        payer = user_authority
+        payer = presale_owner
     )]
     pub presale_account: Account<'info, PresaleAccount>,
     // Contract Authority accounts
@@ -304,7 +307,7 @@ pub struct Initialize<'info> {
     #[account(constraint = usdc_mint.decimals == USDC_DECIMAL)]
     pub usdc_mint: Account<'info, Mint>,
     // WEN token Mint
-    #[account]
+    #[account(constraint = wen_mint.decimals == WEN_DECIMAL)]
     pub wen_mint: Account<'info, Mint>,
 
     // USDC POOL
@@ -347,7 +350,7 @@ pub struct InitUserAccount<'info> {
     pub user_account: Account<'info, UserInfoAccount>,
     pub presale_account: Account<'info, PresaleAccount>,
     // Contract Authority accounts
-    #[account]
+    #[account(mut)]
     pub user_authority: Signer<'info>,
     // Programs and Sysvars
     pub system_program: Program<'info, System>,
@@ -414,7 +417,7 @@ pub struct DepositUsdcForWenToken<'info> {
 #[derive(Accounts)]
 pub struct ClaimLockedWenToken<'info> {
     // Payable account (User wallet)
-    #[account]
+    #[account(mut)]
     pub user_authority: Signer<'info>,
     // User's info
     #[account(
@@ -430,7 +433,7 @@ pub struct ClaimLockedWenToken<'info> {
     )]
     pub user_wen: Account<'info, TokenAccount>,
     // WEN token
-    #[account]
+    #[account(mut)]
     pub wen_mint: Account<'info, Mint>,
     
     #[account(
@@ -453,7 +456,7 @@ pub struct ClaimLockedWenToken<'info> {
 #[derive(Accounts)]
 pub struct WithdrawUSDC<'info> {
     // Payable account (User wallet)
-    #[account]
+    #[account(mut)]
     pub user_authority: Signer<'info>,
     // TODO replace these with the ATA constraints when possible. 
     // User's USDC token account
@@ -492,7 +495,7 @@ pub struct WithdrawUSDC<'info> {
 #[derive(Accounts)]
 pub struct WithdrawWenToken<'info> {
     // Payable account (User wallet)
-    #[account]
+    #[account(mut)]
     pub user_authority: Signer<'info>,
 
     // User's WEN token account
@@ -527,7 +530,7 @@ pub struct WithdrawWenToken<'info> {
 #[derive(Accounts)]
 pub struct FormerHoldersList<'info> {
     // Payable account (Owner wallet)
-    #[account]
+    #[account(mut)]
     pub user_authority: Signer<'info>,
     // User's info
     #[account(mut)]
@@ -535,8 +538,8 @@ pub struct FormerHoldersList<'info> {
     
     #[account(
         seeds = [presale_account.presale_title.as_ref().trim_ascii_whitespace()],
-        bump = presale_account.bumps.presale_account,
-        has_one = wen_mint)]
+        bump = presale_account.bumps.presale_account
+    )]
     pub presale_account: Box<Account<'info, PresaleAccount>>,
     
     // Programs and Sysvars
