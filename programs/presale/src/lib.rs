@@ -3,7 +3,7 @@ use anchor_spl::token::{ self, Mint, Token, TokenAccount, Transfer };
 
 use std::ops::Deref;
 
-declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
+declare_id!("6pUar2yC7WABx95i244kPniEodzQGQwg7TTQcwo17SHv");
 
 // USD coin's Decimal
 const USDC_DECIMAL: u8 = 6;
@@ -11,12 +11,16 @@ const USDC_DECIMAL: u8 = 6;
 const WEN_DECIMAL:u8 = 9;
 // NOTE: we need to consider decimals when we calculate all amount
 // because decimals are different
-// So we use DIVIDER for 10^6 / 10 ^9
-const DIVIDER: u64 = 1000;
+// So we use MULTIPLIER for 10^6 / 10 ^9
+const MULTIPLIER: u64 = 1000;
+
+// 1 WEN = 0.00015 USDC
+const NUMERATOR: u64 = 15;
+const DENOMINATOR: u64 = 100000;
 
 // Locked Rate
 const LOCK_RATE: u64 = 50; // 50%
-const DENOMINATOR: u64 = 100;
+const DIVIDER: u64 = 100;
 
 // Lock duration: 30 days
 const LOCK_DURATION: i64 = 30 * 86400; // seconds
@@ -45,8 +49,8 @@ pub mod presale {
         presale_account.presale_owner = ctx.accounts.presale_owner.key();
         presale_account.usdc_mint = ctx.accounts.usdc_mint.key();
         presale_account.wen_mint = ctx.accounts.wen_mint.key();
-        presale_account.pool_usdc = ctx.accounts.pool_usdc.key();
-        presale_account.pool_wen = ctx.accounts.pool_wen.key();
+        // presale_account.pool_usdc = ctx.accounts.pool_usdc.key();
+        // presale_account.pool_wen = ctx.accounts.pool_wen.key();
 
         Ok(())
     }
@@ -77,7 +81,7 @@ pub mod presale {
     // stake SEEDED token into player
     pub fn purchase(
         ctx: Context<DepositUsdcForWenToken>,
-        amount: u64
+        amount: u64 // USDC amount
     ) -> ProgramResult {
         msg!("Enter staking!!!");
         if amount < 1 {
@@ -103,8 +107,8 @@ pub mod presale {
         }
 
         // USDC decimal is 6 and WEN decimal is 9
-        let wen_amount = amount * DIVIDER;
-        let lock_amount = wen_amount * LOCK_RATE / DENOMINATOR;
+        let wen_amount = amount * MULTIPLIER * DENOMINATOR / NUMERATOR;
+        let lock_amount = wen_amount * LOCK_RATE / DIVIDER;
         let spend_amount = wen_amount - lock_amount;
 
         // Transfer WEN token from pool token account to user's token account.
@@ -310,26 +314,26 @@ pub struct Initialize<'info> {
     #[account(constraint = wen_mint.decimals == WEN_DECIMAL)]
     pub wen_mint: Account<'info, Mint>,
 
-    // USDC POOL
-    #[account(
-        init,
-        token::mint = usdc_mint,
-        token::authority = presale_account,
-        seeds = [presale_title.as_bytes(), b"pool_usdc".as_ref()],
-        bump = bumps.pool_usdc,
-        payer = presale_owner
-    )]
-    pub pool_usdc: Account<'info, TokenAccount>,
-    // WEN token POOL
-    #[account(
-        init,
-        token::mint = wen_mint,
-        token::authority = presale_account,
-        seeds = [presale_title.as_bytes(), b"pool_wen".as_ref()],
-        bump = bumps.pool_wen,
-        payer = presale_owner
-    )]
-    pub pool_wen: Account<'info, TokenAccount>,
+    // // USDC POOL
+    // #[account(
+    //     init,
+    //     token::mint = usdc_mint,
+    //     token::authority = presale_account,
+    //     seeds = [presale_title.as_bytes(), b"pool_usdc".as_ref()],
+    //     bump = bumps.pool_usdc,
+    //     payer = presale_owner
+    // )]
+    // pub pool_usdc: Account<'info, TokenAccount>,
+    // // WEN token POOL
+    // #[account(
+    //     init,
+    //     token::mint = wen_mint,
+    //     token::authority = presale_account,
+    //     seeds = [presale_title.as_bytes(), b"pool_wen".as_ref()],
+    //     bump = bumps.pool_wen,
+    //     payer = presale_owner
+    // )]
+    // pub pool_wen: Account<'info, TokenAccount>,
 
     // Programs and Sysvars
     pub system_program: Program<'info, System>,
